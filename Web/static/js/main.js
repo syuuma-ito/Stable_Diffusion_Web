@@ -10,9 +10,10 @@ async function loading_effect(num_step) {
     $(".prog-text").text("生成中...");
     for (let i = 0; i <= num_step; i++) {
         $(".bar").css("width", (i / num_step) * 100 + "%");
-        await _sleep(100);
+        await _sleep(200);
         console.log((i / num_step) * 100 + "%");
     }
+    $(".prog-text").text("ロード中...");
 }
 
 function outputSelectedValueAndText(obj) {
@@ -31,7 +32,7 @@ $(document).ready(function () {
         let seed = $("#seed").val();
         let num_step = $("#num-step").val();
         loading_effect(num_step);
-        let res = await (await fetch("https://syuuma0209--modal-serve-backend-app2-py-main-dev.modal.run?prompt=" + prompt)).json();
+        let res = await (await fetch("https://syuuma0209--syuuma-stable-diffusion-web-main.modal.run?prompt=" + prompt)).json();
         console.log(res.image);
         $(".loading").hide();
         $(".image").attr("src", "data:image/png;base64," + res.image);
