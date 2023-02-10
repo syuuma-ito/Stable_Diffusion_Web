@@ -54,3 +54,12 @@ textarea {
     margin-bottom: 1em;
     text-decoration: underline;
 }
+.ai-image {
+    aspect-ratio: 1/1;
+    border: 1px solid #aaa;
+    border-radius: 10px;
+}
+.image {
+    width: 100%;
+    height: 100%;
+}

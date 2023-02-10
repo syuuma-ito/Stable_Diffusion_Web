@@ -44,7 +44,18 @@ stub.image = image
 
 
 @stub.function(gpu="A10G")
-async def run_stable_diffusion(prompt: str):
+async def run_stable_diffusion(prompt: str,  allows_NSWF: bool, **kwargs):
+    kwargs = {k: v for k, v in kwargs.items() if v is not None}
+    negative_prompt = kwargs.pop('negative_prompt', "")
+    guidance_scale = kwargs.pop('guidance_scale', 7.5)
+    num_inference_steps = kwargs.pop('num_inference_steps', 100)
+    height = kwargs.pop('height', 512)
+    width = kwargs.pop('width', 512)
+    input_seed = kwargs.pop('seed', 0)
+
+    if not len(kwargs) == 0:
+        print(f"unknow arg : {kwargs}")
+
     import torch
     from diffusers import StableDiffusionPipeline
     from torch import autocast
@@ -57,47 +68,80 @@ async def run_stable_diffusion(prompt: str):
     pipe.enable_xformers_memory_efficient_attention()
 
     # NSWFフィルターを削除(黒塗り回避) (これによりエロ、グロ画像が生成可能になります) (閲覧注意)
-    pipe.safety_checker = lambda images, **kwargs: (images, False)
+    if allows_NSWF:
+        print("NSWFフィルターを削除")
+        pipe.safety_checker = lambda images, **kwargs: (images, False)
 
     # ランダムなシードを生成
-    input_seed = torch.Generator(device=device).seed()
-    generator = torch.Generator(device=device).manual_seed(int(input_seed))
+    if input_seed == 0:
+        input_seed = torch.Generator(device=device).seed()
+        generator = torch.Generator(device=device).manual_seed(int(input_seed))
+    else:
+        generator = torch.Generator(device=device).manual_seed(int(input_seed))
 
-    negative_prompt = ""
+    #
+    #
+    #
+    # =================================================================
+    # プロンプトの設定
+    default_prompt = ""
+    default_prompt += "4k, 8k, super fine illustration, masterpiece, {{delicate composition}}, "
+
+    prompt = default_prompt + prompt
+
+    default_negative_prompt = ""
     # 画質
-    negative_prompt += "flat color, flat shading, blender, retro style, poor quality, worst quality, low quality, normal quality, error, lowere, jpeg artifacts, extra digit, fewer digits, chromatic aberration, "
+    default_negative_prompt += "flat color, flat shading, blender, retro style, poor quality, worst quality, low quality, normal quality, error, lowere, jpeg artifacts, extra digit, fewer digits, chromatic aberration, "
     # テキストを消す
-    negative_prompt += "signature, watermark, username, artist name, tittle, signature, watermark, "
+    default_negative_prompt += "signature, watermark, username, artist name, tittle, signature, watermark, "
     # 色
-    negative_prompt += "grayscale, monochrome, "
+    default_negative_prompt += "grayscale, monochrome, "
     # 構図
-    negative_prompt += "cropped, panel layout"
+    default_negative_prompt += "cropped, panel layout"
     # キャラ
-    negative_prompt += "eye shadow, asymmetrical bangs, expressionless, blank stare, {{{fat}}}, "
+    default_negative_prompt += "eye shadow, asymmetrical bangs, expressionless, blank stare, {{{fat}}}, "
     # 指や体の変形を軽減
-    negative_prompt += "bad fingers, bad anatomy, missing fingers, bad feet, bad hands, long body, "
+    default_negative_prompt += "bad fingers, bad anatomy, missing fingers, bad feet, bad hands, long body, "
     # エロ軽減
-    negative_prompt += "{{{{{{{{{{NSWF}}}}}}}}}}, "
+    # default_negative_prompt += "{{{{{{{{{{NSWF}}}}}}}}}}, "
+
+    negative_prompt = default_negative_prompt + negative_prompt
 
     print("--------------------------------------------------------------------------------------------")
     print(f"prompt = {prompt}")
     print("--------------------------------------------------------------------------------------------")
+    print(f"prompt = {negative_prompt}")
+    print("--------------------------------------------------------------------------------------------")
     print(f"seed = {input_seed}")
+    print("--------------------------------------------------------------------------------------------")
+    print(f"steps = {num_inference_steps}")
     print("--------------------------------------------------------------------------------------------")
 
     with autocast(device):
         image = pipe(
             prompt,
             negative_prompt=negative_prompt,
-            guidance_scale=7.5,
-            num_inference_steps=100,
+            guidance_scale=guidance_scale,
+            num_inference_steps=num_inference_steps,
             generator=generator,
-            height=512,
-            width=512,
+            height=height,
+            width=width,
             max_embeddings_multiples=10,
-        )[0][0]
+        )
+    print(image)
 
-    return image
+    image_info = {
+        "prompt": prompt,
+        "negative_prompt": negative_prompt,
+        "num_inference_steps": num_inference_steps,
+        "guidance_scale": guidance_scale,
+        "seed": input_seed,
+        "height": height,
+        "width": width,
+        "NSFW": image["nsfw_content_detected"],
+    }
+
+    return image[0][0], image_info
 
 
 def pil_to_base64(img):
@@ -112,12 +156,43 @@ def pil_to_base64(img):
 
 
 @stub.webhook
-def main(prompt: str):
+def main(
+        prompt: str = "",
+        allows_NSWF: bool = False,
+        negative_prompt: str = "",
+        guidance_scale: int = 7.5,
+        num_inference_steps: int = 100,
+        height: int = 512,
+        width: int = 512,
+        seed: int = 0
+):
     from deep_translator import GoogleTranslator
 
-    prompt = GoogleTranslator(
-        source='auto', target='en').translate(prompt)
+    try:
+        prompt = GoogleTranslator(
+            source='auto', target='en'
+        ).translate(prompt)
 
-    image = run_stable_diffusion.call(prompt)
-    base64 = pil_to_base64(image)
-    return {"image": base64}
+        negative_prompt = GoogleTranslator(
+            source='auto', target='en'
+        ).translate(negative_prompt)
+
+        image, image_info = run_stable_diffusion.call(
+            prompt,
+            allows_NSWF,
+            negative_prompt=negative_prompt,
+            guidance_scale=guidance_scale,
+            num_inference_steps=num_inference_steps,
+            height=height,
+            width=width,
+            seed=seed,
+        )
+        base64 = pil_to_base64(image)
+        return {
+            "isOK": True,
+            "image": base64,
+            "image_info": image_info,
+        }
+    except Exception as e:
+        print(e)
+        {"isOK": False, "reason": str(type(e)), "args": str(e.args)}
