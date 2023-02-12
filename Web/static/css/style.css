@@ -42,14 +42,10 @@ textarea {
 }
 .prog-bar .bar {
     height: 100%;
-    background: blue; /*バーカラー*/
     position: absolute;
 }
 
 .model-info {
-    /* border: 1px solid #aaa;
-    border-radius: 10px;
-    padding: 0.5em 0.5em 0;  */
     margin-top: 0.5em;
     margin-bottom: 1em;
     text-decoration: underline;
